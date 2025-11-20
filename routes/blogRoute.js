@@ -4,41 +4,48 @@ import upload from "../config/multer.js";
 
 const router = express.Router();
 
-// POST Blog
+// CREATE BLOG
 router.post("/", upload.single("blogImage"), async (req, res) => {
   try {
     const { blogHeading, blogContent } = req.body;
 
-    // Validation
     if (!blogHeading || !blogContent) {
-      return res.status(400).json({ message: "Please fill all fields" });
+      return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Image upload
     const imageUrl = req.file ? req.file.path : "";
 
-    // Create blog
-    const blog = new blogModel({
+    const blog = await blogModel.create({
       blogHeading,
       blogContent,
       blogImage: imageUrl,
     });
 
-    await blog.save();
-    res.status(201).json({ message: "Blog created successfully", blog });
+    res.status(201).json({
+      message: "Blog created successfully",
+      blog,
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    console.log("Error:", err);
+
+    // Duplicate handling (if you add unique later)
+    if (err.code === 11000) {
+      return res.status(400).json({
+        message: "Blog heading already exists",
+      });
+    }
+
+    res.status(500).json({ message: "Server Error", error: err.message });
   }
 });
 
-// GET all blogs
+// GET ALL BLOGS
 router.get("/", async (req, res) => {
   try {
     const blogs = await blogModel.find().sort({ createdAt: -1 });
     res.json(blogs);
   } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: "Server Error" });
   }
 });
 
