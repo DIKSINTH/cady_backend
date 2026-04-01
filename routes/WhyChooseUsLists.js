@@ -1,17 +1,27 @@
 import express from "express";
-import db from "../db/ConnectDB.js";
+import pool from "../db/ConnectDB.js"; // Promise-based pool
 
 const router = express.Router();
 
-// GET all services – return name, description, image_url
-router.get("/", (req, res) => {
-  const q =
-    "SELECT id, Name AS name, Description AS description, Image AS image_url FROM why_choose_us";
+// --- API Route to Fetch All Services from "Why Choose Us" ---
+router.get("/", async (req, res) => {
+  try {
+    const q = `
+      SELECT 
+        id, 
+        Name AS name, 
+        Description AS description, 
+        Image AS image_url 
+      FROM why_choose_us
+    `;
 
-  db.query(q, (err, data) => {
-    if (err) return res.status(500).json({ error: err });
-    res.json(data); // return full array
-  });
+    const [data] = await pool.query(q);
+
+    res.json(data); // Returns array of services
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({ message: "Database error" });
+  }
 });
 
 export default router;

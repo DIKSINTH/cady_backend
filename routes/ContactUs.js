@@ -1,56 +1,56 @@
 import express from "express";
-import db from "../db/ConnectDB.js"; // your MySQL connection file
-import upload from "../config/multer.js"; // your multer file
+import db from "../db/ConnectDB.js";
+import upload from "../config/multer.js";
 
 const router = express.Router();
 
-/* -----------------------------
-   GET Contact Us (only 1 row)
--------------------------------- */
-router.get("/", (req, res) => {
-  const sql = "SELECT * FROM contact_us LIMIT 1";
+/* -----------------------------------
+   GET Contact Us (single row)
+------------------------------------ */
+router.get("/", async (req, res) => {
+  try {
+    const [result] = await db.query("SELECT * FROM contact_us LIMIT 1");
 
-  db.query(sql, (err, result) => {
-    if (err) return res.status(500).json({ error: err });
-
-    if (result.length === 0) {
-      return res.json({
-        id: "",
+    if (!result.length) {
+      return res.status(200).json({
+        id: null,
         Title: "",
         Sub_Title: "",
         Image: "",
       });
     }
 
-    res.json(result[0]);
-  });
+    res.status(200).json(result[0]);
+  } catch (err) {
+    console.error("❌ DB Error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
-/* -----------------------------
+/* -----------------------------------
    UPDATE Contact Us
--------------------------------- */
-router.put("/update/:id", upload.single("image"), (req, res) => {
-  const { id } = req.params;
-  const { Title, Sub_Title } = req.body;
+------------------------------------ */
+router.put("/update/:id", upload.single("image"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { Title, Sub_Title, oldImage } = req.body;
 
-  let image = req.file ? req.file.filename : null;
+    const newImage = req.file ? req.file.filename : oldImage || null;
 
-  let sql = "";
-  let values = [];
+    const sql =
+      "UPDATE contact_us SET Title=?, Sub_Title=?, Image=? WHERE id=?";
+    const values = [Title, Sub_Title, newImage, id];
 
-  if (image) {
-    sql = "UPDATE contact_us SET Title=?, Sub_Title=?, Image=? WHERE id=?";
-    values = [Title, Sub_Title, image, id];
-  } else {
-    sql = "UPDATE contact_us SET Title=?, Sub_Title=? WHERE id=?";
-    values = [Title, Sub_Title, id];
+    await db.query(sql, values);
+
+    res.status(200).json({
+      success: true,
+      message: "Contact Us updated successfully",
+    });
+  } catch (err) {
+    console.error("❌ DB Update Error:", err);
+    res.status(500).json({ error: "Failed to update Contact Us" });
   }
-
-  db.query(sql, values, (err) => {
-    if (err) return res.status(500).json(err);
-
-    res.json({ success: true, message: "Contact Us updated successfully" });
-  });
 });
 
 export default router;

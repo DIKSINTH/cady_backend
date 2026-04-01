@@ -1,56 +1,80 @@
 import express from "express";
 import db from "../db/ConnectDB.js";
 import upload from "../config/multer.js";
+import fs from "fs";
+import path from "path";
 
 const router = express.Router();
 
 /* ---------------------------------
-        GET (load row id=1)
+        GET Logo Design (id=1)
 ---------------------------------- */
-router.get("/", (req, res) => {
+router.get("/", async (req, res) => {
   const sql = "SELECT * FROM logo_design WHERE id=1";
 
-  db.query(sql, (err, result) => {
-    if (err) return res.status(500).json(err);
+  try {
+    const [rows] = await db.query(sql);
 
-    if (result.length === 0) {
-      return res.json({});
-    }
+    if (!rows.length) return res.status(200).json({});
 
-    res.json(result[0]);
-  });
+    res.status(200).json(rows[0]);
+  } catch (error) {
+    console.error("❌ Database error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 });
 
 /* ---------------------------------
-        UPDATE LOGO DESIGN
+        UPDATE Logo Design
 ---------------------------------- */
-router.put("/update", upload.single("Image"), (req, res) => {
+router.put("/update", upload.single("Image"), async (req, res) => {
   const body = req.body;
   const newImage = req.file ? req.file.filename : null;
 
-  let fields = [];
-  let values = [];
+  try {
+    // Fetch old image (if any)
+    let oldImage = null;
+    if (newImage) {
+      const [rows] = await db.query("SELECT Image FROM logo_design WHERE id=1");
+      oldImage = rows[0]?.Image;
+    }
 
-  Object.keys(body).forEach((key) => {
-    fields.push(`${key}=?`);
-    values.push(body[key]);
-  });
+    // Build dynamic SET clause
+    const fields = [];
+    const values = [];
 
-  if (newImage) {
-    fields.push("Image=?");
-    values.push(newImage);
-  }
-
-  const sql = `UPDATE logo_design SET ${fields.join(", ")} WHERE id=1`;
-
-  db.query(sql, values, (err) => {
-    if (err) return res.status(500).json(err);
-
-    res.json({
-      success: true,
-      message: "Logo Design updated successfully",
+    Object.keys(body).forEach((key) => {
+      if (body[key] !== undefined) {
+        fields.push(`${key} = ?`);
+        values.push(body[key]);
+      }
     });
-  });
+
+    if (newImage) {
+      fields.push("Image = ?");
+      values.push(newImage);
+    }
+
+    if (!fields.length) {
+      return res.status(400).json({ message: "No fields to update" });
+    }
+
+    const sql = `UPDATE logo_design SET ${fields.join(", ")} WHERE id=1`;
+    await db.query(sql, values);
+
+    // Delete old image file if replaced
+    if (oldImage && newImage) {
+      const oldPath = path.join(process.cwd(), "uploads", oldImage);
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    }
+
+    res
+      .status(200)
+      .json({ success: true, message: "Logo Design updated successfully" });
+  } catch (error) {
+    console.error("❌ Update error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 });
 
 export default router;

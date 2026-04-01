@@ -2,62 +2,79 @@ import express from "express";
 import db from "../db/ConnectDB.js";
 import upload from "../config/multer.js";
 import fs from "fs";
+import path from "path";
 
 const router = express.Router();
 
 // ------------------ READ ------------------
-router.get("/", (req, res) => {
-  db.query("SELECT * FROM about_us LIMIT 1", (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(result[0] || {});
-  });
+router.get("/", async (req, res) => {
+  try {
+    const [results] = await db.query("SELECT * FROM about_us LIMIT 1");
+    res.status(200).json(results[0] || {});
+  } catch (err) {
+    console.error("DB Error:", err);
+    res.status(500).json({ error: "Error fetching About Us content" });
+  }
 });
 
 // ------------------ UPDATE ------------------
-router.put("/", upload.single("Image"), (req, res) => {
-  const {
-    Description,
-    Scroll_Content,
-    About,
-    Vision,
-    Mission,
-    Value1,
-    Value2,
-    Value3,
-    Value4,
-  } = req.body;
+router.put("/", upload.single("Image"), async (req, res) => {
+  try {
+    const {
+      Description,
+      Scroll_Content,
+      About,
+      Vision,
+      Mission,
+      Value1,
+      Value2,
+      Value3,
+      Value4,
+    } = req.body;
 
-  let sql = `UPDATE about_us SET 
-    Description=?, Scroll_Content=?, About=?, Vision=?, Mission=?, 
-    Value1=?, Value2=?, Value3=?, Value4=?`;
-  const params = [
-    Description,
-    Scroll_Content,
-    About,
-    Vision,
-    Mission,
-    Value1,
-    Value2,
-    Value3,
-    Value4,
-  ];
+    // Handle image update
+    let newImagePath;
+    if (req.file) {
+      newImagePath = "/uploads/" + req.file.filename;
 
-  if (req.file) {
-    sql += `, Image=?`;
-    params.push("/uploads/" + req.file.filename);
-
-    // Delete old image
-    db.query("SELECT Image FROM about_us LIMIT 1", (err, result) => {
-      if (!err && result[0]?.Image && fs.existsSync(result[0].Image)) {
-        fs.unlinkSync(result[0].Image);
+      // Delete old image safely
+      const [oldRow] = await db.query("SELECT Image FROM about_us LIMIT 1");
+      const oldImage = oldRow[0]?.Image;
+      if (oldImage) {
+        const oldPath = path.join(path.resolve(), oldImage.replace(/^\//, ""));
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       }
-    });
-  }
+    }
 
-  db.query(sql, params, (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: "Updated successfully" });
-  });
+    // Build query dynamically
+    let sql = `
+      UPDATE about_us SET 
+        Description=?, Scroll_Content=?, About=?, Vision=?, Mission=?,
+        Value1=?, Value2=?, Value3=?, Value4=?
+    `;
+    const params = [
+      Description,
+      Scroll_Content,
+      About,
+      Vision,
+      Mission,
+      Value1,
+      Value2,
+      Value3,
+      Value4,
+    ];
+
+    if (newImagePath) {
+      sql += `, Image=?`;
+      params.push(newImagePath);
+    }
+
+    await db.query(sql, params);
+    res.json({ message: "About Us updated successfully" });
+  } catch (err) {
+    console.error("Update Error:", err);
+    res.status(500).json({ error: "Error updating About Us content" });
+  }
 });
 
 export default router;

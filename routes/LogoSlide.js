@@ -1,23 +1,24 @@
 import express from "express";
-import db from "../db/ConnectDB.js";
+import pool from "../db/ConnectDB.js"; // promise-based pool
 
 const router = express.Router();
 
-router.get("/", (req, res) => {
-  const query = `
-    SELECT 
-      CONCAT('/uploads/', Image) AS Image_url
-    FROM logo
-    ORDER BY id ASC
-  `;
+// GET all logos with full image URL
+router.get("/", async (req, res) => {
+  try {
+    const query = `
+      SELECT CONCAT('/uploads/', Image) AS Image_url
+      FROM logo
+      ORDER BY id ASC
+    `;
 
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error("DB ERROR:", err);
-      return res.status(500).json({ message: "Database error" });
-    }
+    const [results] = await pool.query(query);
+
     res.json(results);
-  });
+  } catch (error) {
+    console.error("DB Error:", error);
+    res.status(500).json({ message: "Database error" });
+  }
 });
 
 export default router;

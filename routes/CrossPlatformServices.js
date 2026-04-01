@@ -3,41 +3,34 @@ import db from "../db/ConnectDB.js";
 
 const router = express.Router();
 
-// GET: /api/cross-platform-services
-router.get("/", (req, res) => {
-  const query = `
-    SELECT
-      Service1,
-      Service2,
-      Service3,
-      Service4
-    FROM crossplatform_development
-    LIMIT 1
-  `;
+/* --------------------------------------
+   GET CROSS-PLATFORM SERVICES
+--------------------------------------- */
+router.get("/", async (req, res) => {
+  try {
+    const query = `
+      SELECT Service1, Service2, Service3, Service4
+      FROM crossplatform_development
+      LIMIT 1
+    `;
 
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error("❌ DB Error:", err.sqlMessage || err);
-      return res.status(500).json({
-        message: "Database error",
-      });
-    }
+    const [results] = await db.query(query);
 
-    if (!results || results.length === 0) {
+    if (!results.length) {
       return res.status(200).json([]);
     }
 
     const row = results[0];
 
-    const services = [
-      row.Service1,
-      row.Service2,
-      row.Service3,
-      row.Service4,
-    ].filter(Boolean);
+    const services = ["Service1", "Service2", "Service3", "Service4"]
+      .map((key) => row[key])
+      .filter(Boolean);
 
     res.status(200).json(services);
-  });
+  } catch (err) {
+    console.error("❌ Database error:", err.message || err);
+    res.status(500).json({ message: "Database error" });
+  }
 });
 
 export default router;

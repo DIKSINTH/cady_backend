@@ -3,27 +3,62 @@ import db from "../db/ConnectDB.js";
 
 const router = express.Router();
 
-router.post("/", (req, res) => {
-  const { email, password } = req.body;
+router.post("/", async (req, res) => {
+  try {
+    let { Email, Password } = req.body;
+    console.log("BODY RECEIVED:", req.body); // 👈 ADD THIS
 
-  const sql = "SELECT * FROM admin WHERE Email = ? AND Password = ?";
-
-  db.query(sql, [email, password], (err, result) => {
-    if (err) {
-      console.log("Query error:", err);
-      return res.json({ status: "error", message: "Database error" });
-    }
-
-    if (result.length > 0) {
-      return res.json({
-        status: "success",
-        message: "Login successful",
-        user: result[0],
+    // Validate
+    if (!Email || !Password) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Email and password are required",
       });
-    } else {
-      return res.json({ status: "fail", message: "Invalid email or password" });
     }
-  });
+
+    // Remove hidden spaces
+    Email = Email.trim().toLowerCase();
+    Password = Password.trim();
+
+    // Case-insensitive email match
+    const sql = "SELECT * FROM admin WHERE LOWER(Email) = ? LIMIT 1";
+    const [results] = await db.query(sql, [Email]);
+
+    if (results.length === 0) {
+      return res.status(401).json({
+        status: "fail",
+        message: "Invalid email or password",
+      });
+    }
+
+    const user = results[0];
+
+    // Plain text comparison (since you said DB is plain)
+    const isMatch = Password === user.Password.trim();
+
+    if (!isMatch) {
+      return res.status(401).json({
+        status: "fail",
+        message: "Invalid email or password",
+      });
+    }
+
+    return res.status(200).json({
+      status: "success",
+      message: "Login successful",
+      user: {
+        id: user.id,
+        name: user.Name,
+        email: user.Email,
+      },
+    });
+  } catch (error) {
+    console.error("Login Error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Server error. Please try again later.",
+    });
+  }
 });
 
 export default router;

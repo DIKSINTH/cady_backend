@@ -4,7 +4,7 @@ import db from "../db/ConnectDB.js";
 const router = express.Router();
 
 // GET: /api/logo-design-process
-router.get("/", (req, res) => {
+router.get("/", async (req, res) => {
   const query = `
     SELECT
       Design_Process1,
@@ -23,20 +23,18 @@ router.get("/", (req, res) => {
     LIMIT 1
   `;
 
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error("❌ DB Error:", err.sqlMessage || err);
-      return res.status(500).json({
-        message: "Database error",
-      });
+  try {
+    const [results] = await db.query(query);
+
+    if (!results.length) {
+      return res.status(200).json([]); // return empty array if no data
     }
 
-    if (!results || results.length === 0) {
-      return res.status(200).json([]);
-    }
-
-    res.status(200).json(results);
-  });
+    res.status(200).json(results[0]); // return the first row
+  } catch (error) {
+    console.error("❌ Database error:", error);
+    res.status(500).json({ message: "Database error" });
+  }
 });
 
 export default router;

@@ -1,25 +1,27 @@
 import express from "express";
-import db from "../db/ConnectDB.js";
+import pool from "../db/ConnectDB.js"; // Promise-based pool
 
 const router = express.Router();
 
-router.get("/", (req, res) => {
-  const sql = "SELECT Name, Position, Description, Image FROM testimonials";
+// --- API Route to Fetch All Testimonials ---
+router.get("/", async (req, res) => {
+  try {
+    const sql = "SELECT Name, Position, Description, Image FROM testimonials";
+    const [results] = await pool.query(sql);
 
-  db.query(sql, (err, result) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-
-    const mappedData = result.map((item) => ({
+    // Map the data for frontend; return only filename for Image
+    const mappedData = results.map((item) => ({
       Name: item.Name,
       Position: item.Position,
       Description: item.Description,
-      Image: item.Image ? `http://localhost:5000/uploads/${item.Image}` : "",
+      Image: item.Image || null,
     }));
 
     res.json(mappedData);
-  });
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({ message: "Database error" });
+  }
 });
 
 export default router;

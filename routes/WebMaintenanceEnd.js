@@ -1,27 +1,22 @@
 import express from "express";
-import db from "../db/ConnectDB.js";
+import pool from "../db/ConnectDB.js"; // Promise-based pool
 
 const router = express.Router();
 
-// Fetch CTA content for Web Maintenance
-router.get("/", (req, res) => {
-  const query = `
-    SELECT Content1, Content2
-    FROM web_maintenance
-    ORDER BY id DESC
-    LIMIT 1
-  `;
+// --- API Route to Fetch Web Maintenance CTA Content ---
+router.get("/", async (req, res) => {
+  try {
+    const query = `
+      SELECT Content1, Content2
+      FROM web_maintenance
+      ORDER BY id DESC
+      LIMIT 1
+    `;
 
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error("DB Error:", err);
-      return res.status(500).json({
-        message: "Database error",
-      });
-    }
+    const [results] = await pool.query(query);
 
-    // ✅ IMPORTANT: Never return 404
-    if (!results.length) {
+    // Always return object, even if no data
+    if (results.length === 0) {
       return res.json({
         Content1: "",
         Content2: "",
@@ -29,7 +24,12 @@ router.get("/", (req, res) => {
     }
 
     res.json(results[0]);
-  });
+  } catch (err) {
+    console.error("Database error:", err);
+    res.status(500).json({
+      message: "Database error",
+    });
+  }
 });
 
 export default router;

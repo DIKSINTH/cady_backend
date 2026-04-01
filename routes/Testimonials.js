@@ -1,17 +1,19 @@
 import express from "express";
-import db from "../db/ConnectDB.js";
+import pool from "../db/ConnectDB.js"; // Promise-based pool
 import upload from "../config/multer.js";
 import path from "path";
-import fs from "fs";
+import fs from "fs/promises"; // modern promise-based fs
 
 const router = express.Router();
 
 /* ---------------------------------------------------------
-   FETCH ALL TESTIMONIALS (FIXED KEYS)
+   FETCH ALL TESTIMONIALS
 --------------------------------------------------------- */
-router.get("/", (req, res) => {
-  db.query("SELECT * FROM testimonials ORDER BY id DESC", (err, results) => {
-    if (err) return res.status(500).json({ error: err });
+router.get("/", async (req, res) => {
+  try {
+    const [results] = await pool.query(
+      "SELECT * FROM testimonials ORDER BY id DESC",
+    );
 
     const mapped = results.map((row) => ({
       id: row.id,
@@ -22,131 +24,137 @@ router.get("/", (req, res) => {
     }));
 
     res.json(mapped);
-  });
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({ message: "Database error" });
+  }
 });
 
 /* ---------------------------------------------------------
    FETCH SINGLE TESTIMONIAL
 --------------------------------------------------------- */
-router.get("/:id", (req, res) => {
-  db.query(
-    "SELECT * FROM testimonials WHERE id = ?",
-    [req.params.id],
-    (err, results) => {
-      if (err) return res.status(500).json({ error: err });
+router.get("/:id", async (req, res) => {
+  try {
+    const [results] = await pool.query(
+      "SELECT * FROM testimonials WHERE id = ?",
+      [req.params.id],
+    );
 
-      if (!results.length)
-        return res.status(404).json({ error: "Testimonial not found" });
+    if (results.length === 0)
+      return res.status(404).json({ message: "Testimonial not found" });
 
-      const row = results[0];
+    const row = results[0];
 
-      res.json({
-        id: row.id,
-        name: row.Name,
-        position: row.Position,
-        description: row.Description,
-        image: row.Image,
-      });
-    }
-  );
-});
-
-/* ---------------------------------------------------------
-   ADD TESTIMONIAL (FIXED)
---------------------------------------------------------- */
-router.post("/", upload.single("image"), (req, res) => {
-  const { name, position, description } = req.body;
-
-  if (!req.file) {
-    return res.status(400).json({ error: "Image upload failed" });
+    res.json({
+      id: row.id,
+      name: row.Name,
+      position: row.Position,
+      description: row.Description,
+      image: row.Image,
+    });
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({ message: "Database error" });
   }
-
-  db.query(
-    "INSERT INTO testimonials (Name, Position, Description, Image) VALUES (?, ?, ?, ?)",
-    [name, position, description, req.file.filename],
-    (err, result) => {
-      if (err) return res.status(500).json({ error: err });
-
-      res.json({
-        message: "Testimonial added successfully",
-        id: result.insertId,
-      });
-    }
-  );
 });
 
 /* ---------------------------------------------------------
-   UPDATE TESTIMONIAL (FIXED)
+   ADD TESTIMONIAL
 --------------------------------------------------------- */
-router.put("/:id", upload.single("image"), (req, res) => {
-  const { name, position, description } = req.body;
+router.post("/", upload.single("image"), async (req, res) => {
+  try {
+    const { name, position, description } = req.body;
 
-  db.query(
-    "SELECT Image FROM testimonials WHERE id = ?",
-    [req.params.id],
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: err });
+    if (!req.file)
+      return res.status(400).json({ message: "Image upload failed" });
 
-      const oldImage = rows[0]?.Image;
+    const [result] = await pool.query(
+      "INSERT INTO testimonials (Name, Position, Description, Image) VALUES (?, ?, ?, ?)",
+      [name, position, description, req.file.filename],
+    );
 
-      let sql, params;
+    res.json({
+      message: "Testimonial added successfully",
+      id: result.insertId,
+    });
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({ message: "Database error" });
+  }
+});
 
-      if (req.file) {
-        sql =
-          "UPDATE testimonials SET Name=?, Position=?, Description=?, Image=? WHERE id=?";
-        params = [
-          name,
-          position,
-          description,
-          req.file.filename,
-          req.params.id,
-        ];
+/* ---------------------------------------------------------
+   UPDATE TESTIMONIAL
+--------------------------------------------------------- */
+router.put("/:id", upload.single("image"), async (req, res) => {
+  try {
+    const { name, position, description } = req.body;
+    const id = req.params.id;
 
-        if (oldImage) {
-          fs.unlink(path.join(process.cwd(), "uploads", oldImage), () => {});
-        }
-      } else {
-        sql =
-          "UPDATE testimonials SET Name=?, Position=?, Description=? WHERE id=?";
-        params = [name, position, description, req.params.id];
-      }
+    // Get old image
+    const [rows] = await pool.query(
+      "SELECT Image FROM testimonials WHERE id = ?",
+      [id],
+    );
+    const oldImage = rows[0]?.Image;
 
-      db.query(sql, params, (err) => {
-        if (err) return res.status(500).json({ error: err });
+    // Build SQL dynamically
+    const updateFields = ["Name=?", "Position=?", "Description=?"];
+    const values = [name, position, description];
 
-        res.json({ message: "Testimonial updated successfully" });
-      });
+    if (req.file) {
+      updateFields.push("Image=?");
+      values.push(req.file.filename);
     }
-  );
+
+    values.push(id); // for WHERE clause
+
+    await pool.query(
+      `UPDATE testimonials SET ${updateFields.join(", ")} WHERE id=?`,
+      values,
+    );
+
+    // Remove old image if replaced
+    if (req.file && oldImage) {
+      const filePath = path.join(process.cwd(), "uploads", oldImage);
+      fs.unlink(filePath).catch(() => {}); // ignore error if file missing
+    }
+
+    res.json({ message: "Testimonial updated successfully" });
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({ message: "Database error" });
+  }
 });
 
 /* ---------------------------------------------------------
    DELETE TESTIMONIAL
 --------------------------------------------------------- */
-router.delete("/:id", (req, res) => {
-  db.query(
-    "SELECT Image FROM testimonials WHERE id = ?",
-    [req.params.id],
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: err });
+router.delete("/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
 
-      const image = rows[0]?.Image;
+    // Get image name first
+    const [rows] = await pool.query(
+      "SELECT Image FROM testimonials WHERE id = ?",
+      [id],
+    );
+    const image = rows[0]?.Image;
 
-      db.query(
-        "DELETE FROM testimonials WHERE id = ?",
-        [req.params.id],
-        (err) => {
-          if (err) return res.status(500).json({ error: err });
+    // Delete the row
+    await pool.query("DELETE FROM testimonials WHERE id = ?", [id]);
 
-          if (image) {
-            fs.unlink(path.join(process.cwd(), "uploads", image), () => {});
-          }
-
-          res.json({ message: "Testimonial deleted successfully" });
-        }
-      );
+    // Delete image file
+    if (image) {
+      const filePath = path.join(process.cwd(), "uploads", image);
+      fs.unlink(filePath).catch(() => {});
     }
-  );
+
+    res.json({ message: "Testimonial deleted successfully" });
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({ message: "Database error" });
+  }
 });
 
 export default router;

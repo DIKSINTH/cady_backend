@@ -1,38 +1,39 @@
 import express from "express";
-import db from "../db/ConnectDB.js";
+import pool from "../db/ConnectDB.js"; // Promise-based pool
 
 const router = express.Router();
 
 // --- API Route to Fetch Design Processes ---
-router.get("/", (req, res) => {
-  // Fetch the five specific columns from the first row of the web_design table
-  const query =
-    "SELECT Process1, Process2, Process3, Process4, Process5, Process6 FROM web_development LIMIT 1";
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).send("Error fetching data from database");
-    }
+router.get("/", async (req, res) => {
+  try {
+    const query =
+      "SELECT Process1, Process2, Process3, Process4, Process5, Process6 FROM web_development LIMIT 1";
+
+    const [results] = await pool.query(query);
 
     if (results.length === 0) {
       return res
         .status(404)
-        .send("Design process content not found in database");
+        .json({ message: "Design process content not found" });
     }
 
-    // Transform the object into a simple array for easier rendering in React
-    const valuesObject = results[0];
+    const { Process1, Process2, Process3, Process4, Process5, Process6 } =
+      results[0];
+
     const processesArray = [
-      valuesObject.Process1,
-      valuesObject.Process2,
-      valuesObject.Process3,
-      valuesObject.Process4,
-      valuesObject.Process5,
-      valuesObject.Process6,
-    ].filter(Boolean); // Filter out any null/empty values
+      Process1,
+      Process2,
+      Process3,
+      Process4,
+      Process5,
+      Process6,
+    ].filter(Boolean); // remove null/empty values
 
     res.json(processesArray);
-  });
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({ message: "Database error" });
+  }
 });
 
 export default router;

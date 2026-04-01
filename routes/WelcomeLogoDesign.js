@@ -1,25 +1,21 @@
 import express from "express";
-import db from "../db/ConnectDB.js";
+import pool from "../db/ConnectDB.js"; // Promise-based pool
 
 const router = express.Router();
 
-// GET: /api/welcome-logo-design
-router.get("/", (req, res) => {
-  const query = `
-    SELECT Title, Description, Image
-    FROM logo_design
-    LIMIT 1
-  `;
+// --- API Route to Fetch Logo Design Content ---
+router.get("/", async (req, res) => {
+  try {
+    const query = `
+      SELECT Title, Description, Image
+      FROM logo_design
+      LIMIT 1
+    `;
 
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error("❌ DB Error:", err.sqlMessage || err);
-      return res.status(500).json({
-        message: "Database error",
-      });
-    }
+    const [results] = await pool.query(query);
 
-    if (!results || results.length === 0) {
+    // Always return an object, even if no data
+    if (results.length === 0) {
       return res.status(200).json({
         Title: "",
         Description: "",
@@ -28,7 +24,12 @@ router.get("/", (req, res) => {
     }
 
     res.status(200).json(results[0]);
-  });
+  } catch (error) {
+    console.error("❌ Database error:", error.sqlMessage || error);
+    res.status(500).json({
+      message: "Database error",
+    });
+  }
 });
 
 export default router;

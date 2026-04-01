@@ -4,32 +4,47 @@ import upload from "../config/multer.js";
 
 const router = express.Router();
 
-// VIEW — only Title, Description, Image
-router.get("/", (req, res) => {
-  db.query(
-    "SELECT Title, Description, Image FROM ios_development LIMIT 1",
-    (err, result) => {
-      if (err) {
-        console.log("DB Error:", err);
-        return res.status(500).json({ error: err });
-      }
-      res.json(result[0]);
+/* ------------------------------
+   VIEW — only Title, Description, Image
+------------------------------- */
+router.get("/", async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT Title, Description, Image FROM ios_development LIMIT 1",
+    );
+
+    if (!rows.length) {
+      return res.status(200).json({}); // empty object if no record
     }
-  );
+
+    res.status(200).json(rows[0]);
+  } catch (error) {
+    console.error("❌ DB Error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 });
 
-// EDIT — fetch all fields
-router.get("/edit", (req, res) => {
-  db.query("SELECT * FROM ios_development LIMIT 1", (err, result) => {
-    if (err) return res.status(500).json({ error: err });
-    res.json(result[0]);
-  });
+/* ------------------------------
+   EDIT — fetch all fields
+------------------------------- */
+router.get("/edit", async (req, res) => {
+  try {
+    const [rows] = await db.query("SELECT * FROM ios_development LIMIT 1");
+
+    if (!rows.length) return res.status(200).json({});
+
+    res.status(200).json(rows[0]);
+  } catch (error) {
+    console.error("❌ DB Error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 });
 
-// UPDATE — update all fields
-router.post("/update", upload.single("Image"), (req, res) => {
+/* ------------------------------
+   UPDATE — update all fields
+------------------------------- */
+router.post("/update", upload.single("Image"), async (req, res) => {
   const body = req.body;
-
   const finalImage = req.file ? req.file.filename : body.oldImage;
 
   const query = `
@@ -37,13 +52,9 @@ router.post("/update", upload.single("Image"), (req, res) => {
       Title=?, Description=?, Image=?,
 
       Term1=?, Term2=?, Term3=?, Term4=?, Term5=?, Term6=?,
-
       Description1=?, Description2=?, Description3=?, Description4=?, Description5=?, Description6=?,
-
       Why_Ios1=?, Why_Ios2=?, Why_Ios3=?, Why_Ios4=?,
-
       Service1=?, Service2=?, Service3=?, Service4=?
-
     WHERE id=1
   `;
 
@@ -77,10 +88,13 @@ router.post("/update", upload.single("Image"), (req, res) => {
     body.Service4,
   ];
 
-  db.query(query, params, (err) => {
-    if (err) return res.status(500).json({ error: err });
-    res.json({ message: "Updated successfully" });
-  });
+  try {
+    await db.query(query, params);
+    res.status(200).json({ message: "Updated successfully" });
+  } catch (error) {
+    console.error("❌ DB Error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 });
 
 export default router;

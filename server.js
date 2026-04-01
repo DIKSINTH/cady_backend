@@ -84,6 +84,7 @@ import TestimonialsSlideRoutes from "./routes/TestimonialsSlide.js";
 import WelcomeContactUsRoutes from "./routes/WelcomeContactUs.js";
 import ContactMailRoutes from "./routes/ContactMail.js";
 import dashboardCounts from "./routes/DashboardCount.js";
+import googleReviews from "./routes/GoogleReviews.js";
 
 // --- ES Module __dirname Fix ---
 const __filename = fileURLToPath(import.meta.url);
@@ -92,12 +93,11 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // --- Middlewares ---
-app.use(cors());
 
 app.use(
   cors({
     origin: "*", // or your frontend URL
-  })
+  }),
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -151,14 +151,14 @@ app.use("/api/welcome-web-development", WelcomeWebDevelopmentRoutes);
 app.use("/api/web-development-design-lists", WebDevelopmentDesignListsRoutes);
 app.use(
   "/api/web-development-design-process",
-  WebDevelopmentDesignProcessRoutes
+  WebDevelopmentDesignProcessRoutes,
 );
 app.use("/api/web-development-end", WebDevelopmentEndRoutes);
 app.use("/api/welcome-web-maintenance", WelcomeWebMaintenanceRoutes);
 app.use("/api/web-maintenance-design-lists", WebMaintenanceDesignListsRoutes);
 app.use(
   "/api/web-maintenance-design-process",
-  WebMaintenanceDesignProcessRoutes
+  WebMaintenanceDesignProcessRoutes,
 );
 app.use("/api/web-maintenance-end", WebMaintenanceEndRoutes);
 app.use("/api/welcome-android", WelcomeAndroidRoutes);
@@ -191,8 +191,9 @@ app.use("/api/welcome-contact-us", WelcomeContactUsRoutes);
 
 app.use("/api/send-contact-mail", ContactMailRoutes);
 app.use("/api/dashboard-counts", dashboardCounts);
+app.use("/api/google-reviews", googleReviews);
 // --- Server Start ---chat
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running at http://0.0.0.0:${PORT}`);
 });

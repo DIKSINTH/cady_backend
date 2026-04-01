@@ -1,28 +1,28 @@
 import express from "express";
-import db from "../db/ConnectDB.js";
+import pool from "../db/ConnectDB.js"; // promise-based pool
 
 const router = express.Router();
 
-// Fetch slides from "banners" table
-router.get("/", (req, res) => {
-  const query = `
-    SELECT 
-      id,
-      Title AS title,
-      Description AS description,
-      Image AS image_url
-    FROM banners
-    ORDER BY id ASC
-  `;
+// GET all banners/slides
+router.get("/", async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        id,
+        Title AS title,
+        Description AS description,
+        Image AS image_url
+      FROM banners
+      ORDER BY id ASC
+    `;
 
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error("Database error:", err);
-      return res.status(500).json({ error: "Error fetching slides" });
-    }
+    const [results] = await pool.query(query);
 
     res.json(results);
-  });
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({ error: "Error fetching slides" });
+  }
 });
 
 export default router;

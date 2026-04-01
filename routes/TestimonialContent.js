@@ -1,51 +1,66 @@
 import express from "express";
-import db from "../db/ConnectDB.js";
+import pool from "../db/ConnectDB.js"; // promise-based pool
 import upload from "../config/multer.js";
-import fs from "fs";
+import fs from "fs/promises";
 import path from "path";
 
 const router = express.Router();
 
 // GET first testimonial content row
-router.get("/", (req, res) => {
-  db.query("SELECT * FROM testimonial_content LIMIT 1", (err, result) => {
-    if (err) return res.status(500).json({ error: err });
-    if (!result.length)
-      return res.status(404).json({ error: "No content found" });
+router.get("/", async (req, res) => {
+  try {
+    const [results] = await pool.query(
+      "SELECT * FROM testimonial_content LIMIT 1",
+    );
 
-    res.json(result[0]);
-  });
+    if (!results.length) {
+      return res.status(404).json({ error: "No content found" });
+    }
+
+    res.json(results[0]);
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
 // UPDATE (image required)
-router.put("/", upload.single("Image"), (req, res) => {
-  const { Heading, Content } = req.body;
-  const newImage = req.file?.filename;
+router.put("/", upload.single("Image"), async (req, res) => {
+  try {
+    const { Heading, Content } = req.body;
+    const newImage = req.file?.filename;
 
-  if (!newImage) {
-    return res.status(400).json({ error: "Image is required" });
-  }
-
-  db.query("SELECT Image FROM testimonial_content LIMIT 1", (err, rows) => {
-    if (err) return res.status(500).json({ error: err });
-
-    const oldImage = rows[0]?.Image;
-
-    // Delete old image
-    if (oldImage) {
-      const oldPath = path.join(process.cwd(), "uploads", oldImage);
-      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    if (!newImage) {
+      return res.status(400).json({ error: "Image is required" });
     }
 
-    const sql =
-      "UPDATE testimonial_content SET Heading=?, Content=?, Image=? LIMIT 1";
+    // Get old image filename
+    const [rows] = await pool.query(
+      "SELECT Image FROM testimonial_content LIMIT 1",
+    );
+    const oldImage = rows[0]?.Image;
 
-    db.query(sql, [Heading, Content, newImage], (err2) => {
-      if (err2) return res.status(500).json({ error: err2 });
+    // Delete old image if exists
+    if (oldImage) {
+      const oldPath = path.join(process.cwd(), "uploads", oldImage);
+      try {
+        await fs.unlink(oldPath);
+      } catch (err) {
+        // ignore if file does not exist
+      }
+    }
 
-      res.json({ message: "Updated successfully" });
-    });
-  });
+    // Update row
+    await pool.query(
+      "UPDATE testimonial_content SET Heading=?, Content=?, Image=? LIMIT 1",
+      [Heading, Content, newImage],
+    );
+
+    res.json({ message: "Updated successfully" });
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
 export default router;

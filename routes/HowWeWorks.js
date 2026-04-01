@@ -3,12 +3,13 @@ import db from "../db/ConnectDB.js";
 import upload from "../config/multer.js";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
 
 const router = express.Router();
 
-/* ------------------------------
+/* ---------------------------------
    JODIT IMAGE UPLOAD
------------------------------- */
+--------------------------------- */
 const joditStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
   filename: (req, file, cb) =>
@@ -19,96 +20,123 @@ const joditUpload = multer({ storage: joditStorage });
 
 router.post("/upload-image", joditUpload.single("file"), (req, res) => {
   if (!req.file) {
-    return res.json({ success: false, message: "Upload failed" });
+    return res.status(400).json({ success: false, message: "Upload failed" });
   }
-  return res.json({
+  res.json({
     success: true,
-    file: { url: `http://localhost:5000/uploads/${req.file.filename}` },
+    file: { url: `/uploads/${req.file.filename}` },
   });
 });
 
-/* ------------------------------
-   GET ALL (VIEW PAGE)
------------------------------- */
-router.get("/", (req, res) => {
-  db.query(
-    "SELECT id, Name, Description, Image FROM how_we_works ORDER BY id DESC",
-    (err, results) => {
-      if (err) return res.status(500).json({ error: err });
-      res.json(results);
-    }
-  );
+/* ---------------------------------
+   GET ALL ENTRIES
+--------------------------------- */
+router.get("/", async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT id, Name, Description, Image, URL FROM how_we_works ORDER BY id DESC",
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("DB Error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
 });
 
-/* ------------------------------
-   GET SINGLE (EDIT)
------------------------------- */
-router.get("/:id", (req, res) => {
-  db.query(
-    "SELECT * FROM how_we_works WHERE id = ?",
-    [req.params.id],
-    (err, results) => {
-      if (err) return res.status(500).json({ error: err });
-      res.json(results[0]);
-    }
-  );
+/* ---------------------------------
+   GET SINGLE ENTRY
+--------------------------------- */
+router.get("/:id", async (req, res) => {
+  try {
+    const [rows] = await db.query("SELECT * FROM how_we_works WHERE id = ?", [
+      req.params.id,
+    ]);
+
+    if (!rows.length) return res.status(404).json({ message: "Not found" });
+
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("DB Error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
 });
 
-/* ------------------------------
-   ADD NEW
------------------------------- */
-router.post("/", upload.single("Image"), (req, res) => {
+/* ---------------------------------
+   ADD NEW ENTRY
+--------------------------------- */
+router.post("/", upload.single("Image"), async (req, res) => {
   const { Name, Description, URL } = req.body;
   const Image = req.file ? req.file.filename : null;
 
-  db.query(
-    "INSERT INTO how_we_works (Name, Description, Image, URL) VALUES (?, ?, ?, ?)",
-    [Name, Description, Image, URL],
-    (err, result) => {
-      if (err) return res.status(500).json({ error: err });
-
-      res.json({
-        message: "How We Work added successfully",
-        id: result.insertId,
-      });
-    }
-  );
+  try {
+    const [result] = await db.query(
+      "INSERT INTO how_we_works (Name, Description, Image, URL) VALUES (?, ?, ?, ?)",
+      [Name, Description, Image, URL],
+    );
+    res
+      .status(201)
+      .json({ message: "Added successfully", id: result.insertId });
+  } catch (err) {
+    console.error("DB Error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
 });
 
-/* ------------------------------
-   UPDATE
------------------------------- */
-router.put("/:id", upload.single("Image"), (req, res) => {
+/* ---------------------------------
+   UPDATE ENTRY
+--------------------------------- */
+router.put("/:id", upload.single("Image"), async (req, res) => {
   const { Name, Description, URL } = req.body;
 
-  let sql = "";
-  let params = [];
+  try {
+    // If a new image is uploaded, get old image to delete
+    let params = [Name, Description, URL, req.params.id];
+    let sql = "UPDATE how_we_works SET Name=?, Description=?, URL=? WHERE id=?";
 
-  if (req.file) {
-    sql =
-      "UPDATE how_we_works SET Name = ?, Description = ?, Image = ?, URL = ? WHERE id = ?";
-    params = [Name, Description, req.file.filename, URL, req.params.id];
-  } else {
-    sql =
-      "UPDATE how_we_works SET Name = ?, Description = ?, URL = ? WHERE id = ?";
-    params = [Name, Description, URL, req.params.id];
+    if (req.file) {
+      // Delete old image
+      const [oldRows] = await db.query(
+        "SELECT Image FROM how_we_works WHERE id=?",
+        [req.params.id],
+      );
+      const oldImage = oldRows[0]?.Image;
+      if (oldImage && fs.existsSync(`uploads/${oldImage}`)) {
+        fs.unlinkSync(`uploads/${oldImage}`);
+      }
+
+      sql =
+        "UPDATE how_we_works SET Name=?, Description=?, Image=?, URL=? WHERE id=?";
+      params = [Name, Description, req.file.filename, URL, req.params.id];
+    }
+
+    await db.query(sql, params);
+    res.json({ message: "Updated successfully" });
+  } catch (err) {
+    console.error("DB Error:", err);
+    res.status(500).json({ message: "Internal server error" });
   }
-
-  db.query(sql, params, (err) => {
-    if (err) return res.status(500).json({ error: err });
-
-    res.json({ message: "How We Work updated successfully" });
-  });
 });
 
-/* ------------------------------
-   DELETE
------------------------------- */
-router.delete("/:id", (req, res) => {
-  db.query("DELETE FROM how_we_works WHERE id = ?", [req.params.id], (err) => {
-    if (err) return res.status(500).json({ error: err });
+/* ---------------------------------
+   DELETE ENTRY
+--------------------------------- */
+router.delete("/:id", async (req, res) => {
+  try {
+    // Delete image file if exists
+    const [rows] = await db.query("SELECT Image FROM how_we_works WHERE id=?", [
+      req.params.id,
+    ]);
+    const image = rows[0]?.Image;
+    if (image && fs.existsSync(`uploads/${image}`)) {
+      fs.unlinkSync(`uploads/${image}`);
+    }
+
+    await db.query("DELETE FROM how_we_works WHERE id=?", [req.params.id]);
     res.json({ message: "Deleted successfully" });
-  });
+  } catch (err) {
+    console.error("DB Error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
 });
 
 export default router;

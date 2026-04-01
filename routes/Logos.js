@@ -1,91 +1,118 @@
 import express from "express";
-import fs from "fs";
+import fs from "fs/promises";
+import path from "path";
 import db from "../db/ConnectDB.js";
 import upload from "../config/multer.js";
 
 const router = express.Router();
+const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 
+// -----------------------------
 // GET ALL LOGOS
-router.get("/", (req, res) => {
-  const sql = "SELECT * FROM logo ORDER BY id ASC";
-  db.query(sql, (err, result) => {
-    if (err) return res.status(500).json({ error: err });
-    res.json(result);
-  });
+// -----------------------------
+router.get("/", async (req, res) => {
+  try {
+    const [results] = await db.query("SELECT * FROM logo ORDER BY id ASC");
+    res.json(results);
+  } catch (err) {
+    console.error("DB Error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
-// GET ONE LOGO
-router.get("/:id", (req, res) => {
-  const sql = "SELECT * FROM logo WHERE id = ?";
-  db.query(sql, [req.params.id], (err, result) => {
-    if (err) return res.status(500).json({ error: err });
-    if (result.length === 0)
-      return res.status(404).json({ error: "Not found" });
-
-    res.json(result[0]);
-  });
+// -----------------------------
+// GET SINGLE LOGO
+// -----------------------------
+router.get("/:id", async (req, res) => {
+  try {
+    const [results] = await db.query("SELECT * FROM logo WHERE id = ?", [
+      req.params.id,
+    ]);
+    if (!results.length)
+      return res.status(404).json({ error: "Logo not found" });
+    res.json(results[0]);
+  } catch (err) {
+    console.error("DB Error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
+// -----------------------------
 // ADD LOGO
-router.post("/add", upload.single("logo"), (req, res) => {
+// -----------------------------
+router.post("/add", upload.single("logo"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-  const sql = "INSERT INTO logo (Image) VALUES (?)";
-  db.query(sql, [req.file.filename], (err) => {
-    if (err) return res.status(500).json({ error: err });
+  try {
+    await db.query("INSERT INTO logo (Image) VALUES (?)", [req.file.filename]);
     res.json({ message: "Logo added successfully" });
-  });
+  } catch (err) {
+    console.error("DB Error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
+// -----------------------------
 // UPDATE LOGO
-router.put("/update/:id", upload.single("logo"), (req, res) => {
+// -----------------------------
+router.put("/update/:id", upload.single("logo"), async (req, res) => {
   if (!req.file)
-    return res.status(400).json({ message: "No new image uploaded" });
+    return res.status(400).json({ error: "No new image uploaded" });
 
-  const newLogo = req.file.filename;
+  try {
+    const [results] = await db.query("SELECT Image FROM logo WHERE id = ?", [
+      req.params.id,
+    ]);
+    if (!results.length)
+      return res.status(404).json({ error: "Logo not found" });
 
-  db.query(
-    "SELECT Image FROM logo WHERE id = ?",
-    [req.params.id],
-    (err, result) => {
-      if (err) return res.status(500).json({ error: err });
-      if (result.length === 0)
-        return res.status(404).json({ error: "Logo not found" });
+    const oldFile = results[0].Image;
+    const oldPath = path.join(UPLOAD_DIR, oldFile);
 
-      const oldPath = "uploads/" + result[0].Image;
-      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-
-      db.query(
-        "UPDATE logo SET Image = ? WHERE id = ?",
-        [newLogo, req.params.id],
-        (err2) => {
-          if (err2) return res.status(500).json({ error: err2 });
-          res.json({ message: "Logo updated successfully" });
-        }
-      );
+    // Delete old file if exists
+    try {
+      await fs.unlink(oldPath);
+    } catch (e) {
+      // ignore if file does not exist
     }
-  );
+
+    await db.query("UPDATE logo SET Image = ? WHERE id = ?", [
+      req.file.filename,
+      req.params.id,
+    ]);
+
+    res.json({ message: "Logo updated successfully" });
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
+// -----------------------------
 // DELETE LOGO
-router.delete("/delete/:id", (req, res) => {
-  db.query(
-    "SELECT Image FROM logo WHERE id = ?",
-    [req.params.id],
-    (err, result) => {
-      if (err) return res.status(500).json({ error: err });
-      if (result.length === 0)
-        return res.status(404).json({ error: "Logo not found" });
+// -----------------------------
+router.delete("/delete/:id", async (req, res) => {
+  try {
+    const [results] = await db.query("SELECT Image FROM logo WHERE id = ?", [
+      req.params.id,
+    ]);
+    if (!results.length)
+      return res.status(404).json({ error: "Logo not found" });
 
-      const filePath = "uploads/" + result[0].Image;
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-
-      db.query("DELETE FROM logo WHERE id = ?", [req.params.id], (err2) => {
-        if (err2) return res.status(500).json({ error: err2 });
-        res.json({ message: "Logo deleted successfully" });
-      });
+    const filePath = path.join(UPLOAD_DIR, results[0].Image);
+    try {
+      await fs.unlink(filePath);
+    } catch (e) {
+      // ignore if file does not exist
     }
-  );
+
+    await db.query("DELETE FROM logo WHERE id = ?", [req.params.id]);
+
+    res.json({ message: "Logo deleted successfully" });
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
 export default router;

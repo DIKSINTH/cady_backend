@@ -3,30 +3,42 @@ import db from "../db/ConnectDB.js";
 
 const router = express.Router();
 
-router.get("/", (req, res) => {
-  const sql =
-    "SELECT Process1, Process2, Process3, Process4 FROM logo_design LIMIT 1";
+/**
+ * GET /api/logo-design-process
+ * Returns structured logo design process steps
+ */
+router.get("/", async (req, res) => {
+  try {
+    const sql = `
+      SELECT Process1, Process2, Process3, Process4
+      FROM logo_design
+      LIMIT 1
+    `;
 
-  db.query(sql, (err, result) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
+    const [rows] = await db.query(sql);
+
+    if (!rows.length) {
+      return res.status(200).json([]);
     }
 
-    if (!result || result.length === 0) {
-      return res.status(404).json({ message: "No data found" });
-    }
+    const directions = ["up", "down", "up", "down"];
 
-    const row = result[0];
+    const processArray = Object.values(rows[0])
+      .map((value, index) => ({
+        name: value,
+        step: `STEP ${index + 1}`,
+        dir: directions[index],
+      }))
+      .filter((item) => item.name);
 
-    const processArray = [
-      { name: row.Process1 || "", step: "STEP 1", dir: "up" },
-      { name: row.Process2 || "", step: "STEP 2", dir: "down" },
-      { name: row.Process3 || "", step: "STEP 3", dir: "up" },
-      { name: row.Process4 || "", step: "STEP 4", dir: "down" },
-    ];
-
-    res.json(processArray);
-  });
+    return res.status(200).json(processArray);
+  } catch (error) {
+    console.error("GET /logo-design-process Error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
 });
 
 export default router;

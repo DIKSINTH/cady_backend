@@ -3,7 +3,10 @@ import db from "../db/ConnectDB.js";
 
 const router = express.Router();
 
-router.get("/", (req, res) => {
+/* -------------------------------------------------
+   GET iOS Services
+------------------------------------------------- */
+router.get("/", async (req, res) => {
   const query = `
     SELECT Service1, Service2, Service3, Service4
     FROM ios_development
@@ -11,22 +14,23 @@ router.get("/", (req, res) => {
     LIMIT 1
   `;
 
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error("DB Error:", err);
-      return res.status(500).json({ message: "Database error" });
+  try {
+    const [rows] = await db.query(query);
+
+    if (!rows.length) {
+      return res.status(200).json([]); // Return empty array if no data
     }
 
-    if (!results.length) {
-      return res.status(404).json({
-        message: "iOS services content not found",
-      });
-    }
+    const { Service1, Service2, Service3, Service4 } = rows[0];
 
-    const { Service1, Service2, Service3, Service4 } = results[0];
+    // Only return non-empty services
+    const services = [Service1, Service2, Service3, Service4].filter(Boolean);
 
-    res.json([Service1, Service2, Service3, Service4].filter(Boolean));
-  });
+    res.status(200).json(services);
+  } catch (error) {
+    console.error("❌ Database error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 });
 
 export default router;

@@ -1,47 +1,23 @@
 import express from "express";
-import db from "../db/ConnectDB.js";
+import pool from "../db/ConnectDB.js"; // Promise-based pool
 
 const router = express.Router();
 
-// ---------- GET SETTINGS (one row only) ----------
-router.get("/", (req, res) => {
-  db.query("SELECT * FROM settings LIMIT 1", (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(result[0] || {});
-  });
+// ---------- GET SETTINGS (single row) ----------
+router.get("/", async (req, res) => {
+  try {
+    const [results] = await pool.query("SELECT * FROM settings LIMIT 1");
+    res.json(results[0] || {});
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
 // ---------- UPDATE SETTINGS ----------
-router.put("/", (req, res) => {
-  const {
-    Address,
-    Mobile_Number,
-    Email,
-    Facebook_URL,
-    Instagram_URL,
-    LinkedIn_URL,
-    Skype_URL,
-    Google_Map,
-    Whatsapp,
-  } = req.body;
-
-  const sql = `
-    UPDATE settings SET 
-      Address=?, 
-      Mobile_Number=?, 
-      Email=?, 
-      Facebook_URL=?, 
-      Instagram_URL=?, 
-      LinkedIn_URL=?, 
-      Skype_URL=?, 
-      Google_Map=?, 
-      Whatsapp=? 
-    LIMIT 1
-  `;
-
-  db.query(
-    sql,
-    [
+router.put("/", async (req, res) => {
+  try {
+    const {
       Address,
       Mobile_Number,
       Email,
@@ -51,12 +27,39 @@ router.put("/", (req, res) => {
       Skype_URL,
       Google_Map,
       Whatsapp,
-    ],
-    (err, result) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ message: "Settings updated successfully" });
-    }
-  );
+    } = req.body;
+
+    const sql = `
+      UPDATE settings SET 
+        Address=?, 
+        Mobile_Number=?, 
+        Email=?, 
+        Facebook_URL=?, 
+        Instagram_URL=?, 
+        LinkedIn_URL=?, 
+        Skype_URL=?, 
+        Google_Map=?, 
+        Whatsapp=?
+      LIMIT 1
+    `;
+
+    await pool.query(sql, [
+      Address,
+      Mobile_Number,
+      Email,
+      Facebook_URL,
+      Instagram_URL,
+      LinkedIn_URL,
+      Skype_URL,
+      Google_Map,
+      Whatsapp,
+    ]);
+
+    res.json({ message: "Settings updated successfully" });
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
 export default router;
